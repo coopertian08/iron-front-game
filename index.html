@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#07110f" />
+    <title>钢铁前线 · 坦克对战</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="menu-open">
+    <main class="game-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p>IRON FRONT</p>
+            <h1>钢铁前线</h1>
+          </div>
+        </div>
+
+        <div class="battle-status" aria-live="polite">
+          <div class="hq-status enemy-hq-status">
+            <span>敌军总部</span>
+            <div class="status-bar"><i id="enemy-hq-bar"></i></div>
+            <strong id="enemy-hq-hp">2000</strong>
+          </div>
+          <div class="timer-block">
+            <small>战斗时间</small>
+            <strong id="battle-time">00:00</strong>
+          </div>
+          <div class="hq-status player-hq-status">
+            <span>我方总部</span>
+            <div class="status-bar"><i id="player-hq-bar"></i></div>
+            <strong id="player-hq-hp">2000</strong>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button id="return-menu" class="icon-button" type="button" aria-label="返回主界面" title="返回主界面">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.2 12 4l9 7.2v8.3h-6v-5.3H9v5.3H3v-8.3Z"/></svg>
+          </button>
+          <button id="sound-toggle" class="icon-button" type="button" aria-label="切换声音" title="切换声音">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2.2-3.87v7.74A4.5 4.5 0 0 0 16.5 12Z"/></svg>
+          </button>
+          <button id="pause-toggle" class="icon-button" type="button" aria-label="暂停战斗" title="暂停战斗">
+            <svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="battle-layout">
+        <aside class="intel-panel panel">
+          <div class="panel-heading">
+            <div><small>TACTICAL FEED</small><h2>战场情报</h2></div>
+            <span class="live-dot">实时</span>
+          </div>
+          <div class="objective">
+            <span class="objective-icon">◎</span>
+            <div><small>当前目标</small><strong>摧毁敌军总部</strong></div>
+          </div>
+          <div id="event-log" class="event-log" aria-live="polite"></div>
+          <div class="legend">
+            <span><i class="ally"></i>我方</span>
+            <span><i class="enemy"></i>敌方</span>
+            <span><i class="hq"></i>总部</span>
+          </div>
+        </aside>
+
+        <section class="battlefield-card">
+          <div class="map-ribbon enemy-ribbon"><span>敌军战区</span><i></i></div>
+          <div class="battle-orders" role="group" aria-label="战场调度命令">
+            <button type="button" data-order="attack" class="active" aria-pressed="true"><i>▲</i><span><b>进攻</b><small>全兵出击</small></span></button>
+            <button type="button" data-order="bridgeDefense" aria-pressed="false"><i>◆</i><span><b>防守</b><small>退守桥后</small></span></button>
+            <button type="button" data-order="baseDefense" aria-pressed="false"><i>■</i><span><b>全境防守</b><small>回防总部</small></span></button>
+          </div>
+          <div id="manual-status" class="manual-status"><b>自由操控</b><span>点击我方单位后使用 W / A / S / D 移动，武器会自动开火</span></div>
+          <div id="battlefield-viewport" class="battlefield-viewport" aria-label="可上下滑动的垂直战场">
+            <canvas id="battlefield" width="900" height="2400"></canvas>
+            <div class="drag-hint" id="drag-hint">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 8.5 5.5h2.3v4.2h2.4V5.5h2.3L12 2Zm0 20 3.5-3.5h-2.3v-4.2h-2.4v4.2H8.5L12 22Z"/></svg>
+              上下拖动查看战场
+            </div>
+            <button id="focus-action" class="focus-action" type="button" title="定位交战区域">⌖</button>
+          </div>
+          <div class="map-ribbon ally-ribbon"><i></i><span>我方战区</span></div>
+        </section>
+
+        <aside class="minimap-panel panel">
+          <div class="panel-heading">
+            <div><small>BATTLE MAP</small><h2>战术地图</h2></div>
+          </div>
+          <div id="minimap-wrap" class="minimap-wrap">
+            <canvas id="minimap" width="150" height="400"></canvas>
+            <div id="minimap-camera" class="minimap-camera"></div>
+          </div>
+          <div class="map-tip" id="map-tip"><span>≈</span>中央河流仅可经双桥通过</div>
+          <section class="fortification-dock" aria-label="防御工事栏">
+            <div class="fortification-heading"><span>FIELD WORKS</span><b>防御工事</b></div>
+            <button class="fortification-card" type="button" data-fortification="obstacle">
+              <span class="fortification-icon obstacle-icon" aria-hidden="true"><i></i></span>
+              <span><strong>拒马</strong><small>4 CP · 3秒</small></span>
+            </button>
+            <button class="fortification-card" type="button" data-fortification="bunker">
+              <span class="fortification-icon bunker-icon" aria-hidden="true"><i></i></span>
+              <span><strong>机枪堡垒</strong><small>9 CP · 6秒</small></span>
+            </button>
+            <p>拖到己方部队附近建造</p>
+          </section>
+          <div class="unit-counts">
+            <div><small>我方单位</small><strong id="ally-count">0</strong></div>
+            <div><small>敌方单位</small><strong id="enemy-count">0</strong></div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="command-deck">
+        <div class="command-points">
+          <div class="cp-orb"><strong id="cp-value">7</strong><span>CP</span></div>
+          <div class="cp-copy">
+            <small>指挥点</small>
+            <div class="cp-pips" id="cp-pips" aria-label="指挥点进度"></div>
+            <span id="cp-timer">+1 / 0.9秒</span>
+            <span id="warehouse-status" class="warehouse-status">仓库补给 +1 / 6.0秒</span>
+          </div>
+        </div>
+
+        <div class="deploy-area">
+          <div class="unit-cards">
+            <button class="unit-card selected" type="button" data-unit="light">
+              <span class="unit-illustration light-tank" aria-hidden="true"><i></i></span>
+              <span class="unit-info"><small>快速突击</small><strong>轻型坦克</strong><em>速度快 · 火力中等</em></span>
+              <span class="cost">3 <b>CP</b></span>
+              <span class="hotkey">1</span>
+            </button>
+            <button class="unit-card" type="button" data-unit="medium">
+              <span class="unit-illustration medium-tank" aria-hidden="true"><i></i></span>
+              <span class="unit-info"><small>均衡推进</small><strong>中型坦克</strong><em>攻防均衡 · 机动适中</em></span>
+              <span class="cost">5 <b>CP</b></span>
+              <span class="hotkey">2</span>
+            </button>
+            <button class="unit-card" type="button" data-unit="heavy">
+              <span class="unit-illustration heavy-tank" aria-hidden="true"><i></i></span>
+              <span class="unit-info"><small>重装攻坚</small><strong>重型坦克</strong><em>高伤害 · 移速缓慢</em></span>
+              <span class="cost">7 <b>CP</b></span>
+              <span class="hotkey">3</span>
+            </button>
+            <button class="unit-card" type="button" data-unit="artillery">
+              <span class="unit-illustration field-artillery" aria-hidden="true"><i></i></span>
+              <span class="unit-info"><small>远程压制</small><strong>野战炮</strong><em>超远射程 · 防护薄弱</em></span>
+              <span class="cost">6 <b>CP</b></span>
+              <span class="hotkey">4</span>
+            </button>
+            <button class="unit-card" type="button" data-unit="rocket">
+              <span class="unit-illustration rocket-artillery" aria-hidden="true"><i></i></span>
+              <span class="unit-info"><small>火箭齐射</small><strong>火箭炮</strong><em>八枚齐射 · 装填缓慢</em></span>
+              <span class="cost">15 <b>CP</b></span>
+              <span class="hotkey">5</span>
+            </button>
+            <button class="unit-card" type="button" data-unit="helicopter">
+              <span class="unit-illustration attack-helicopter" aria-hidden="true"><i></i></span>
+              <span class="unit-info"><small>空中突击</small><strong>武装直升机</strong><em>跨河飞行 · 空地作战</em></span>
+              <span class="cost">8 <b>CP</b></span>
+              <span class="hotkey">6</span>
+            </button>
+            <button class="unit-card" type="button" data-unit="apc">
+              <span class="unit-illustration armored-carrier" aria-hidden="true"><i></i></span>
+              <span class="unit-info"><small>机械化增援</small><strong>步兵装甲车</strong><em>抵达战线 · 释放两名步兵</em></span>
+              <span class="cost">6 <b>CP</b></span>
+              <span class="hotkey">7</span>
+            </button>
+          </div>
+
+          <div class="lane-select">
+            <span>选择部署路线</span>
+            <div class="lane-buttons">
+              <button type="button" data-lane="0"><b>A</b>左翼</button>
+              <button type="button" data-lane="1"><b>B</b>中路</button>
+              <button type="button" data-lane="2"><b>C</b>右翼</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="start-screen" class="modal-layer active">
+      <div class="start-panel">
+        <div class="start-badge">MAIN COMMAND</div>
+        <p class="eyebrow">钢铁前线 · 主界面</p>
+        <h2>钢铁前线</h2>
+        <p class="intro">选择战场，率领装甲、步兵、炮兵与武装直升机协同推进。保护补给仓库获取额外指挥点，并优先摧毁敌军仓库。</p>
+        <section class="career-board" aria-label="战绩榜">
+          <div class="career-title"><span>COMMANDER RECORD</span><b>战绩榜</b></div>
+          <div><small>胜利</small><strong id="career-wins">0</strong></div>
+          <div><small>战败</small><strong id="career-losses">0</strong></div>
+          <div><small>总战局</small><strong id="career-total">0</strong></div>
+          <div><small>胜率</small><strong id="career-rate">0%</strong></div>
+        </section>
+        <div class="difficulty-select" role="group" aria-label="选择战斗难度">
+          <span class="difficulty-label">选择难度</span>
+          <div class="difficulty-options">
+            <button type="button" data-difficulty="novice"><b>新手级</b><small>少量增援</small></button>
+            <button type="button" data-difficulty="easy"><b>简单级</b><small>缓慢推进</small></button>
+            <button type="button" data-difficulty="normal" class="active" aria-pressed="true"><b>普通级</b><small>标准攻势</small></button>
+            <button type="button" data-difficulty="hard"><b>困难级</b><small>密集增援</small></button>
+            <button type="button" data-difficulty="hell"><b>地狱级</b><small>钢铁洪流</small></button>
+          </div>
+        </div>
+        <div class="map-select" role="group" aria-label="选择战场地图">
+          <span class="difficulty-label">选择地图</span>
+          <div class="map-options">
+            <button type="button" data-map="classic" class="active" aria-pressed="true"><b>经典桥战</b><small>双桥争夺</small></button>
+            <button type="button" data-map="single"><b>单桥决战</b><small>宽河独桥</small></button>
+            <button type="button" data-map="plains"><b>平原战</b><small>开阔推进</small></button>
+            <button type="button" data-map="large"><b>大地图</b><small>超长双桥战线</small></button>
+          </div>
+        </div>
+        <div class="briefing-grid">
+          <div><span class="brief-icon">3</span><strong>轻型坦克</strong><small>快速机动 · 3 CP</small></div>
+          <div><span class="brief-icon medium">5</span><strong>中型坦克</strong><small>均衡攻防 · 5 CP</small></div>
+          <div><span class="brief-icon heavy">7</span><strong>重型坦克</strong><small>重装高伤 · 7 CP</small></div>
+          <div><span class="brief-icon artillery">6</span><strong>野战炮</strong><small>远程压制 · 6 CP</small></div>
+          <div><span class="brief-icon rocket">15</span><strong>火箭炮</strong><small>八枚齐射 · 15 CP</small></div>
+          <div><span class="brief-icon helicopter">8</span><strong>武装直升机</strong><small>空地作战 · 8 CP</small></div>
+          <div><span class="brief-icon apc">6</span><strong>步兵装甲车</strong><small>释放步兵 · 6 CP</small></div>
+        </div>
+        <button id="start-button" class="primary-button" type="button">开始战斗 <span>→</span></button>
+        <small class="control-note">快捷键：1—7 选择单位 · A / S / D 部署 · 点击己方单位后 WASD 驾驶 · 空格暂停</small>
+      </div>
+    </div>
+
+    <div id="result-screen" class="modal-layer">
+      <div class="result-panel">
+        <span id="result-kicker">MISSION COMPLETE</span>
+        <h2 id="result-title">战斗胜利</h2>
+        <p id="result-copy">敌军总部已被摧毁，战区控制权已夺取。</p>
+        <div class="result-stats">
+          <div><small>战斗用时</small><strong id="result-time">00:00</strong></div>
+          <div><small>部署单位</small><strong id="result-deployed">0</strong></div>
+          <div><small>摧毁敌军</small><strong id="result-kills">0</strong></div>
+        </div>
+        <div class="result-actions">
+          <button id="restart-button" class="primary-button" type="button">再次出击 <span>↻</span></button>
+          <button id="result-menu-button" class="secondary-button" type="button">返回主界面</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
