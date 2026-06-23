@@ -13,7 +13,9 @@
   const CP_MAX = 20;
   const CP_INTERVAL = .9;
   const WAREHOUSE_CP_INTERVAL = 5;
-  const CAREER_KEY = "ironFrontCareerV1";
+  const GAME_VERSION = "2.0.0";
+  const CAREER_KEY = "ironFrontCareer";
+  const LEGACY_CAREER_KEYS = ["ironFrontCareerV1"];
 
   const MAPS = {
     classic: { name: "经典桥战", height: 2400, river: true, riverTop: 1100, riverBottom: 1300, bridges: [285, 615], bridgeWidth: 116, enemyHQ: 120, playerHQ: 2280, enemySpawn: 245, playerSpawn: 2155 },
@@ -87,6 +89,9 @@
   };
 
   const el = {
+    homeScreen: document.querySelector("#home-screen"),
+    enterCommandButton: document.querySelector("#enter-command"),
+    gameVersion: document.querySelector("#game-version"),
     startScreen: document.querySelector("#start-screen"),
     startButton: document.querySelector("#start-button"),
     resultScreen: document.querySelector("#result-screen"),
@@ -104,6 +109,12 @@
     careerLosses: document.querySelector("#career-losses"),
     careerTotal: document.querySelector("#career-total"),
     careerRate: document.querySelector("#career-rate"),
+    homeCareerWins: document.querySelector("#home-career-wins"),
+    homeCareerLosses: document.querySelector("#home-career-losses"),
+    homeCareerTotal: document.querySelector("#home-career-total"),
+    homeCareerRate: document.querySelector("#home-career-rate"),
+    battleIntro: document.querySelector("#battle-intro"),
+    destructionPrompt: document.querySelector("#destruction-prompt"),
     cpValue: document.querySelector("#cp-value"),
     cpPips: document.querySelector("#cp-pips"),
     battleTime: document.querySelector("#battle-time"),
@@ -149,15 +160,25 @@
   const manualKeys = new Set();
   const manualTapExpiry = new Map();
   let fortificationDrag = null;
+  let introTimeouts = [];
   let career = loadCareer();
 
   function loadCareer() {
     try {
-      const saved = JSON.parse(localStorage.getItem(CAREER_KEY) || "{}");
-      return {
+      let raw = localStorage.getItem(CAREER_KEY);
+      if (!raw) {
+        for (const legacyKey of LEGACY_CAREER_KEYS) {
+          raw = localStorage.getItem(legacyKey);
+          if (raw) break;
+        }
+      }
+      const saved = JSON.parse(raw || "{}");
+      const migrated = {
         wins: Math.max(0, Number.parseInt(saved.wins, 10) || 0),
         losses: Math.max(0, Number.parseInt(saved.losses, 10) || 0)
       };
+      localStorage.setItem(CAREER_KEY, JSON.stringify(migrated));
+      return migrated;
     } catch {
       return { wins: 0, losses: 0 };
     }
@@ -169,6 +190,11 @@
     el.careerLosses.textContent = career.losses;
     el.careerTotal.textContent = total;
     el.careerRate.textContent = total ? `${Math.round(career.wins / total * 100)}%` : "--";
+    el.homeCareerWins.textContent = career.wins;
+    el.homeCareerLosses.textContent = career.losses;
+    el.homeCareerTotal.textContent = total;
+    el.homeCareerRate.textContent = total ? `${Math.round(career.wins / total * 100)}%` : "--";
+    el.gameVersion.textContent = GAME_VERSION;
   }
 
   function recordBattleResult(playerWon) {
@@ -194,6 +220,7 @@
       y,
       hp: MAX_HQ_HP,
       maxHp: MAX_HQ_HP,
+      destroyProgress: 0,
       flash: 0,
       cannons: [-104, 104].map((offsetX, index) => ({
         index,
@@ -262,6 +289,13 @@
       running: false,
       paused: false,
       ended: false,
+      introActive: false,
+      destroying: false,
+      destructionWon: null,
+      destructionTime: 0,
+      destructionBurst: 0,
+      destructionReady: false,
+      resultRecorded: false,
       sound: true,
       selected: "light",
       playerCP: 7,
@@ -298,6 +332,7 @@
   }
 
   function resetGame() {
+    clearIntroSequence();
     configureMap(selectedMap);
     background.width = W;
     background.height = H;
@@ -308,6 +343,8 @@
     cancelFortificationDrag();
     el.eventLog.innerHTML = "";
     el.resultScreen.classList.remove("active");
+    el.battleIntro.classList.remove("active", "leaving");
+    el.destructionPrompt.classList.remove("active");
     document.body.classList.add("menu-open");
     document.body.classList.remove("paused");
     el.pauseButton.classList.remove("active");
@@ -434,17 +471,54 @@
     }
   }
 
+  function clearIntroSequence() {
+    for (const timeout of introTimeouts) clearTimeout(timeout);
+    introTimeouts = [];
+  }
+
+  function enterCommandCenter() {
+    el.homeScreen.classList.remove("active");
+    el.startScreen.classList.add("active");
+    updateCareerBoard();
+  }
+
+  function showHomeMenu() {
+    el.startScreen.classList.remove("active");
+    el.resultScreen.classList.remove("active");
+    el.homeScreen.classList.add("active");
+    document.body.classList.add("menu-open");
+    updateCareerBoard();
+  }
+
+  function startBattleIntro() {
+    clearIntroSequence();
+    state.introActive = true;
+    state.running = false;
+    el.battleIntro.classList.remove("leaving");
+    requestAnimationFrame(() => el.battleIntro.classList.add("active"));
+    introTimeouts.push(setTimeout(() => {
+      el.battleIntro.classList.add("leaving");
+    }, 3200));
+    introTimeouts.push(setTimeout(() => {
+      el.battleIntro.classList.remove("active", "leaving");
+      state.introActive = false;
+      state.running = true;
+      addLog("前线报告完毕：战斗正式开始", "ally");
+      toast("选择单位并从 A / B / C 路线部署", false, 2600);
+    }, 4300));
+  }
+
   function beginGame() {
     if (state.started) return;
     state.started = true;
-    state.running = true;
+    state.running = false;
     document.body.classList.remove("menu-open");
     addLog(`战斗难度：${DIFFICULTIES[state.difficulty].name}`, state.difficulty === "hell" ? "enemy" : "ally");
     el.startScreen.classList.remove("active");
     initAudio();
     sound("start");
-    addLog("战斗开始：指挥点正在持续恢复", "ally");
-    toast("选择坦克，然后点击 A / B / C 路线部署", false, 2600);
+    addLog("前线传令兵正在汇报战况", "ally");
+    startBattleIntro();
   }
 
   function initAudio() {
@@ -711,6 +785,10 @@
   function update(dt) {
     if (!state.running || state.paused || state.ended) return;
     state.time += dt;
+    if (state.destroying) {
+      updateHQDestruction(dt);
+      return;
+    }
     state.playerCPProgress += dt;
     state.enemyCPProgress += dt;
     const aiProfile = DIFFICULTIES[state.difficulty];
@@ -773,8 +851,8 @@
     if (state.selectedUnitId !== null && !getSelectedUnit()) clearManualSelection(true);
     state.shake = Math.max(0, state.shake - dt * 12);
 
-    if (state.enemyHQ.hp <= 0) finish(true);
-    else if (state.playerHQ.hp <= 0) finish(false);
+    if (state.enemyHQ.hp <= 0) beginHQDestruction(true);
+    else if (state.playerHQ.hp <= 0) beginHQDestruction(false);
   }
 
   function runAI() {
@@ -1811,30 +1889,80 @@
     if (p.smoke) p.size += dt * (p.trail ? 5 : 10);
   }
 
+  function beginHQDestruction(playerWon) {
+    if (state.destroying || state.ended) return;
+    state.destroying = true;
+    state.destructionWon = playerWon;
+    state.destructionTime = 0;
+    state.destructionBurst = 0;
+    state.destructionReady = false;
+    state.projectiles = [];
+    clearManualSelection(true);
+    const hq = playerWon ? state.enemyHQ : state.playerHQ;
+    hq.hp = 0;
+    hq.destroyProgress = 0;
+    if (!state.resultRecorded) {
+      recordBattleResult(playerWon);
+      state.resultRecorded = true;
+    }
+    const targetScroll = hq.y / H * canvas.clientHeight - viewport.clientHeight * .5;
+    viewport.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" });
+    addLog(`${playerWon ? "敌军" : "我方"}总部结构失稳，弹药库发生连锁爆炸`, playerWon ? "ally" : "enemy");
+    createExplosion(hq.x, hq.y, 2.8, playerWon ? "player" : "enemy");
+    state.shake = 16;
+    sound("impact");
+  }
+
+  function updateHQDestruction(dt) {
+    state.destructionTime += dt;
+    const hq = state.destructionWon ? state.enemyHQ : state.playerHQ;
+    hq.destroyProgress = Math.min(1, state.destructionTime / 3.25);
+    while (state.destructionBurst < 9 && state.destructionTime >= .28 + state.destructionBurst * .34) {
+      const burst = state.destructionBurst++;
+      const angle = burst * 2.17 + Math.random() * .5;
+      const radius = 28 + (burst % 4) * 32;
+      const x = hq.x + Math.cos(angle) * radius;
+      const y = hq.y + Math.sin(angle) * radius * .42;
+      createExplosion(x, y, 1.4 + burst * .16, state.destructionWon ? "player" : "enemy");
+      state.shake = Math.max(state.shake, 9 + burst * .8);
+      sound("impact");
+    }
+    for (const particle of state.particles) updateParticle(particle, dt);
+    for (const floater of state.floaters) { floater.life -= dt; floater.y -= 22 * dt; }
+    for (const wreck of state.wrecks) wreck.life -= dt;
+    state.particles = state.particles.filter(particle => particle.life > 0);
+    state.floaters = state.floaters.filter(floater => floater.life > 0);
+    state.wrecks = state.wrecks.filter(wreck => wreck.life > 0);
+    state.shake = Math.max(0, state.shake - dt * 8);
+    if (state.destructionTime >= 3.65 && !state.destructionReady) {
+      state.destructionReady = true;
+      el.destructionPrompt.classList.add("active");
+    }
+  }
+
+  function revealBattleResult() {
+    if (!state.destructionReady || state.ended) return;
+    finish(state.destructionWon);
+  }
+
   function finish(playerWon) {
     if (state.ended) return;
     state.ended = true;
     state.running = false;
-    recordBattleResult(playerWon);
-    createExplosion(W / 2, playerWon ? state.enemyHQ.y : state.playerHQ.y, 3.2, playerWon ? "player" : "enemy");
-    sound("impact");
-    setTimeout(() => {
-      el.resultPanel.classList.toggle("defeat", !playerWon);
-      el.resultKicker.textContent = playerWon ? "MISSION COMPLETE" : "MISSION FAILED";
-      el.resultTitle.textContent = playerWon ? "战斗胜利" : "防线失守";
-      el.resultCopy.textContent = playerWon ? "敌军总部已被摧毁，战区控制权已夺取。" : "我方总部遭到摧毁。调整部署节奏，再次夺回战场。";
-      el.resultTime.textContent = formatTime(state.time);
-      el.resultDeployed.textContent = state.deployed;
-      el.resultKills.textContent = state.kills;
-      el.resultScreen.classList.add("active");
-    }, 700);
+    el.destructionPrompt.classList.remove("active");
+    el.resultPanel.classList.toggle("defeat", !playerWon);
+    el.resultKicker.textContent = playerWon ? "MISSION COMPLETE" : "MISSION FAILED";
+    el.resultTitle.textContent = playerWon ? "战斗胜利" : "防线失守";
+    el.resultCopy.textContent = playerWon ? "敌军总部已在连锁爆炸中化为废墟，战区控制权已夺取。" : "我方总部已被彻底摧毁。调整部署节奏，再次夺回战场。";
+    el.resultTime.textContent = formatTime(state.time);
+    el.resultDeployed.textContent = state.deployed;
+    el.resultKills.textContent = state.kills;
+    el.resultScreen.classList.add("active");
   }
 
   function returnToMainMenu() {
     resetGame();
-    el.resultScreen.classList.remove("active");
-    el.startScreen.classList.add("active");
-    updateCareerBoard();
+    showHomeMenu();
   }
 
   const background = document.createElement("canvas");
@@ -2052,24 +2180,39 @@
     }
 
     if (fortification.type === "obstacle") {
+      ctx.fillStyle = "rgba(0,0,0,.4)";
+      ctx.beginPath(); ctx.ellipse(5, 15, 62, 21, 0, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = "#2a241c";
-      ctx.lineWidth = 9;
+      ctx.lineWidth = 12;
       ctx.lineCap = "round";
       for (const offset of [-22, 0, 22]) {
         ctx.beginPath(); ctx.moveTo(offset - 24, -18); ctx.lineTo(offset + 24, 18); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(offset - 24, 18); ctx.lineTo(offset + 24, -18); ctx.stroke();
       }
-      ctx.strokeStyle = "#8d7651";
-      ctx.lineWidth = 5;
+      ctx.strokeStyle = "#76583b";
+      ctx.lineWidth = 7;
       for (const offset of [-22, 0, 22]) {
         ctx.beginPath(); ctx.moveTo(offset - 23, -18); ctx.lineTo(offset + 23, 18); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(offset - 23, 18); ctx.lineTo(offset + 23, -18); ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(218,188,132,.45)";
+      ctx.lineWidth = 2;
+      for (const offset of [-22, 0, 22]) {
+        ctx.beginPath(); ctx.moveTo(offset - 20, -16); ctx.lineTo(offset + 20, 16); ctx.stroke();
       }
       ctx.strokeStyle = "#a8a58e";
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(-52, 0); ctx.lineTo(52, 0); ctx.stroke();
       for (let x = -48; x <= 48; x += 12) {
         ctx.beginPath(); ctx.moveTo(x, -5); ctx.lineTo(x + 4, 5); ctx.stroke();
+      }
+      ctx.fillStyle = "#b7a988";
+      for (const x of [-43, -21, 1, 23, 45]) {
+        ctx.beginPath(); ctx.arc(x, 0, 2.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = "#9a633f";
+      for (const x of [-34, -8, 18, 42]) {
+        ctx.beginPath(); ctx.arc(x, 9 + (x % 3), 3, 0, Math.PI * 2); ctx.fill();
       }
     } else {
       const teamAccent = fortification.team === "player" ? "#a9c45d" : "#bc584d";
@@ -2243,7 +2386,31 @@
     const c = isPlayer ? "#9db257" : "#a74e45";
     ctx.save();
     ctx.translate(hq.x, hq.y);
-    if (hq.hp <= 0) ctx.globalAlpha = .55;
+    const collapse = hq.destroyProgress ?? 0;
+    if (collapse >= 1) {
+      ctx.fillStyle = "rgba(7,9,8,.8)";
+      ctx.beginPath(); ctx.ellipse(0, 18, 205, 58, 0, 0, Math.PI * 2); ctx.fill();
+      const rubbleColors = ["#222822", "#3d4038", "#545246", "#6a4939"];
+      for (let index = 0; index < 28; index++) {
+        const angle = index * 2.31;
+        const radius = 18 + index % 7 * 25;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius * .28 + 8;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+        ctx.fillStyle = rubbleColors[index % rubbleColors.length];
+        ctx.fillRect(-9 - index % 4, -5, 18 + index % 5 * 3, 8 + index % 3 * 4);
+        ctx.restore();
+      }
+      ctx.fillStyle = "#141916"; ctx.fillRect(-78, -4, 156, 20);
+      ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-72, 4); ctx.lineTo(-18, -9); ctx.lineTo(24, 10); ctx.lineTo(73, -3); ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (collapse > 0) {
+      ctx.translate(0, collapse * 11);
+      ctx.rotate(Math.sin(collapse * Math.PI * 4) * .025 * collapse);
+      ctx.globalAlpha = 1 - collapse * .28;
+    }
 
     for (const cannon of hq.cannons) {
       if (!cannon.targetId) continue;
@@ -2766,6 +2933,20 @@
     }
     ctx.closePath(); ctx.fill();
     ctx.strokeStyle = "rgba(10,15,11,.65)"; ctx.lineWidth = 2; ctx.stroke();
+
+    ctx.save();
+    ctx.globalAlpha = .2;
+    ctx.fillStyle = isPlayer ? "#17281b" : "#321d18";
+    ctx.beginPath(); ctx.ellipse(-size * .2, -size * .42, size * .24, size * .12, -.45, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(size * .28, size * .05, size * .2, size * .1, .62, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-size * .23, size * .36, size * .18, size * .08, .2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = "rgba(225,224,190,.3)";
+    for (const side of [-1, 1]) {
+      for (const y of [-.42, .08, .42]) {
+        ctx.beginPath(); ctx.arc(side * size * .43, y * size, 1.25, 0, Math.PI * 2); ctx.fill();
+      }
+    }
 
     ctx.fillStyle = "rgba(12,17,13,.24)";
     ctx.fillRect(-size * .47, size * .28, size * .94, size * .22);
@@ -3331,7 +3512,9 @@
     }
   }
 
+  el.enterCommandButton.addEventListener("click", enterCommandCenter);
   el.startButton.addEventListener("click", beginGame);
+  el.destructionPrompt.addEventListener("click", revealBattleResult);
   el.resultMenuButton.addEventListener("click", returnToMainMenu);
   el.returnMenuButton.addEventListener("click", returnToMainMenu);
   el.difficultyButtons.forEach(button => button.addEventListener("click", () => selectDifficulty(button.dataset.difficulty)));
@@ -3344,10 +3527,11 @@
   el.restartButton.addEventListener("click", () => {
     resetGame();
     state.started = true;
-    state.running = true;
+    state.running = false;
     document.body.classList.remove("menu-open");
     initAudio();
-    addLog("新一轮战斗开始", "ally");
+    addLog("新一轮战斗即将开始", "ally");
+    startBattleIntro();
   });
   el.unitCards.forEach(card => card.addEventListener("click", () => selectUnit(card.dataset.unit)));
   el.laneButtons.forEach(button => button.addEventListener("click", () => {
@@ -3380,6 +3564,13 @@
     viewport.scrollTop = dragStartScroll - (event.clientY - dragStartY) * 1.25;
   });
   viewport.addEventListener("pointerup", event => {
+    if (state.destructionReady) {
+      dragging = false;
+      viewport.classList.remove("dragging");
+      if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      revealBattleResult();
+      return;
+    }
     const shouldSelect = !pointerMoved && pointerStartedOnCanvas;
     dragging = false; viewport.classList.remove("dragging");
     if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
@@ -3398,6 +3589,7 @@
     if (new URLSearchParams(location.search).has("debug") && event.code === "KeyV") {
       career = { wins: 0, losses: 0 };
       localStorage.removeItem(CAREER_KEY);
+      for (const legacyKey of LEGACY_CAREER_KEYS) localStorage.removeItem(legacyKey);
       updateCareerBoard();
       return;
     }
@@ -3662,8 +3854,8 @@
       updateHud(true);
       return;
     }
-    if (new URLSearchParams(location.search).has("debug") && event.code === "KeyZ" && state.started) { finish(true); return; }
-    if (new URLSearchParams(location.search).has("debug") && event.code === "KeyX" && state.started) { finish(false); return; }
+    if (new URLSearchParams(location.search).has("debug") && event.code === "KeyZ" && state.started) { beginHQDestruction(true); return; }
+    if (new URLSearchParams(location.search).has("debug") && event.code === "KeyX" && state.started) { beginHQDestruction(false); return; }
     if (event.code === "Digit1") selectUnit("light");
     else if (event.code === "Digit2") selectUnit("medium");
     else if (event.code === "Digit3") selectUnit("heavy");
