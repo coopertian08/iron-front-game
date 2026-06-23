@@ -74,6 +74,38 @@
             <button type="button" data-order="baseDefense" aria-pressed="false"><i>■</i><span><b>全境防守</b><small>回防总部</small></span></button>
           </div>
           <div id="manual-status" class="manual-status"><b>自由操控</b><span>点击我方单位后使用 W / A / S / D 移动，武器会自动开火</span></div>
+          <div id="battle-intro" class="battle-intro" aria-live="assertive">
+            <div class="soldier-figure" aria-hidden="true">
+              <svg viewBox="0 0 220 360">
+                <defs>
+                  <linearGradient id="uniform" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#718064"/><stop offset=".55" stop-color="#38463b"/><stop offset="1" stop-color="#202a24"/></linearGradient>
+                  <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d4a77c"/><stop offset="1" stop-color="#805b43"/></linearGradient>
+                  <filter id="soldierShadow"><feDropShadow dx="8" dy="12" stdDeviation="7" flood-opacity=".6"/></filter>
+                </defs>
+                <g filter="url(#soldierShadow)">
+                  <path fill="#171d19" d="M64 340 79 211h28l-2 129H84l-5-85-1 85H64Zm63 0-12-129h28l9 129h-21l-9-84 20 84h-15Z"/>
+                  <path fill="url(#uniform)" stroke="#19211c" stroke-width="4" d="M53 224c5-59 19-91 47-101l34 2c25 13 36 45 42 99l-31 13-11-61-1 88H76l-1-88-7 59-33-9 18-2Z"/>
+                  <path fill="#262f28" d="M76 153h60v35H76z"/><path fill="#9b885b" d="M70 184h72v12H70z"/>
+                  <path fill="#1b241e" d="M82 128 93 99h30l18 29-29 16-30-16Z"/>
+                  <path fill="url(#skin)" stroke="#493426" stroke-width="3" d="M89 78c2-25 39-28 49-7l-6 41-18 16-22-15-3-35Z"/>
+                  <path fill="#303a31" stroke="#131915" stroke-width="4" d="M79 77c5-33 55-43 70-7l-5 16-64 2-1-11Z"/>
+                  <path fill="#515e4f" d="M86 67c11-18 43-19 55 2-18-5-36-4-55-2Z"/>
+                  <path fill="#2b211b" d="M99 94h8v4h-8zm25 0h8v4h-8z"/><path stroke="#3b291f" stroke-width="3" d="m108 111 9 3 10-4" fill="none"/>
+                  <path fill="#29332b" stroke="#151b17" stroke-width="4" d="m139 151 18-5 42 139-16 6-44-140Z"/>
+                  <path fill="#111713" d="m166 223 29-9 5 12-30 10z"/>
+                  <path fill="url(#skin)" d="m45 218 28 5-7 28-31-10 10-23Zm104 2 28-8 8 26-31 11-5-29Z"/>
+                  <path fill="#313c33" d="M88 146h18v48H88zm32 0h18v48h-18z"/><path fill="#a79a6b" d="M92 151h10v35H92zm32 0h10v35h-10z"/>
+                  <circle cx="113" cy="170" r="5" fill="#c9d6bd"/>
+                </g>
+              </svg>
+            </div>
+            <div class="soldier-report">
+              <small>FRONTLINE REPORT</small>
+              <strong>报告长官！</strong>
+              <p>我们要夺取对面的领地，请您指挥！</p>
+            </div>
+          </div>
+          <button id="destruction-prompt" class="destruction-prompt" type="button"><span>总部已被摧毁</span><b>点击屏幕查看战报</b></button>
           <div id="battlefield-viewport" class="battlefield-viewport" aria-label="可上下滑动的垂直战场">
             <canvas id="battlefield" width="900" height="2400"></canvas>
             <div class="drag-hint" id="drag-hint">
@@ -182,11 +214,29 @@
       </section>
     </main>
 
-    <div id="start-screen" class="modal-layer active">
-      <div class="start-panel">
-        <div class="start-badge">MAIN COMMAND</div>
-        <p class="eyebrow">钢铁前线 · 主界面</p>
+    <div id="home-screen" class="modal-layer home-screen active">
+      <section class="home-panel">
+        <div class="home-emblem"><i></i><span>IF</span></div>
+        <p class="eyebrow">IRON FRONT · COMMAND</p>
         <h2>钢铁前线</h2>
+        <p class="home-subtitle">装甲战场指挥模拟</p>
+        <section class="career-board home-career" aria-label="长期战绩">
+          <div class="career-title"><span>PERMANENT RECORD</span><b>指挥官战绩</b></div>
+          <div><small>胜利</small><strong id="home-career-wins">0</strong></div>
+          <div><small>战败</small><strong id="home-career-losses">0</strong></div>
+          <div><small>总战局</small><strong id="home-career-total">0</strong></div>
+          <div><small>胜率</small><strong id="home-career-rate">--</strong></div>
+        </section>
+        <button id="enter-command" class="primary-button home-enter" type="button">进入指挥部 <span>→</span></button>
+        <small class="game-version">战绩跨版本保留 · VERSION <b id="game-version">2.0.0</b></small>
+      </section>
+    </div>
+
+    <div id="start-screen" class="modal-layer">
+      <div class="start-panel">
+        <div class="start-badge">BATTLE SETUP</div>
+        <p class="eyebrow">钢铁前线 · 作战准备</p>
+        <h2>选择战场</h2>
         <p class="intro">选择战场，率领装甲、步兵、炮兵与武装直升机协同推进。保护补给仓库获取额外指挥点，并优先摧毁敌军仓库。</p>
         <section class="career-board" aria-label="战绩榜">
           <div class="career-title"><span>COMMANDER RECORD</span><b>战绩榜</b></div>
