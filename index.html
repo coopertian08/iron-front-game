@@ -74,6 +74,18 @@
             <button type="button" data-order="baseDefense" aria-pressed="false"><i>■</i><span><b>全境防守</b><small>回防总部</small></span></button>
           </div>
           <div id="manual-status" class="manual-status"><b>自由操控</b><span>点击我方单位后使用 W / A / S / D 移动，武器会自动开火</span></div>
+          <div id="cockpit-overlay" class="cockpit-overlay" aria-hidden="true">
+            <div class="cockpit-vignette"></div>
+            <div class="cockpit-horizon"><i></i><span></span></div>
+            <div class="cockpit-crosshair"><i></i><b></b><em></em></div>
+            <div class="cockpit-panel">
+              <small>DRIVER VIEW</small>
+              <strong id="cockpit-unit">未接入</strong>
+              <span id="cockpit-weapon">左键开火 · WASD 驾驶</span>
+              <div class="reload-meter"><i id="cockpit-reload"></i></div>
+            </div>
+            <div class="cockpit-help">ESC 退出驾驶 · F 跟随前线 · 拖动/WASD移动地图</div>
+          </div>
           <div id="battle-intro" class="battle-intro" aria-live="assertive">
             <div class="soldier-figure" aria-hidden="true">
               <svg viewBox="0 0 260 380">
@@ -116,7 +128,7 @@
           </div>
           <button id="destruction-prompt" class="destruction-prompt" type="button"><span>总部已被摧毁</span><b>点击屏幕查看战报</b></button>
           <div id="battlefield-viewport" class="battlefield-viewport" aria-label="可上下滑动的垂直战场">
-            <canvas id="battlefield" width="900" height="2400"></canvas>
+            <canvas id="battlefield" width="1200" height="2400"></canvas>
             <div class="drag-hint" id="drag-hint">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 8.5 5.5h2.3v4.2h2.4V5.5h2.3L12 2Zm0 20 3.5-3.5h-2.3v-4.2h-2.4v4.2H8.5L12 22Z"/></svg>
               上下拖动查看战场

@@ -8,7 +8,7 @@
   const viewport = document.querySelector("#battlefield-viewport");
 
   const W = canvas.width;
-  const LANES = [190, 450, 710];
+  const LANES = [260, 600, 940];
   const MAX_HQ_HP = 2000;
   const CP_MAX = 20;
   const CP_INTERVAL = .9;
@@ -117,6 +117,10 @@
     homeCareerTotal: document.querySelector("#home-career-total"),
     homeCareerRate: document.querySelector("#home-career-rate"),
     battleIntro: document.querySelector("#battle-intro"),
+    cockpitOverlay: document.querySelector("#cockpit-overlay"),
+    cockpitUnit: document.querySelector("#cockpit-unit"),
+    cockpitWeapon: document.querySelector("#cockpit-weapon"),
+    cockpitReload: document.querySelector("#cockpit-reload"),
     destructionPrompt: document.querySelector("#destruction-prompt"),
     cpValue: document.querySelector("#cp-value"),
     cpPips: document.querySelector("#cp-pips"),
@@ -151,7 +155,9 @@
   let audioContext = null;
   let toastTimeout = 0;
   let dragging = false;
+  let dragStartX = 0;
   let dragStartY = 0;
+  let dragStartScrollLeft = 0;
   let dragStartScroll = 0;
   let pointerStartX = 0;
   let pointerStartY = 0;
@@ -161,6 +167,7 @@
   let fortificationId = 0;
   let selectedDifficulty = "normal";
   const manualKeys = new Set();
+  const cameraKeys = new Set();
   const manualTapExpiry = new Map();
   let fortificationDrag = null;
   let introTimeouts = [];
@@ -283,7 +290,7 @@
     HAS_RIVER = map.river;
     RIVER_TOP = map.riverTop;
     RIVER_BOTTOM = map.riverBottom;
-    BRIDGES = [...map.bridges];
+    BRIDGES = map.bridges.map(x => x / 900 * W);
     BRIDGE_WIDTH = map.bridgeWidth;
     PLAYER_HQ_Y = map.playerHQ;
     ENEMY_HQ_Y = map.enemyHQ;
@@ -318,6 +325,9 @@
       map: selectedMap,
       battleOrder: "attack",
       selectedUnitId: null,
+      cockpitMode: false,
+      manualFire: false,
+      manualAimPulse: 0,
       manualDodges: 0,
       aiCooldown: difficulty.firstWave,
       aiFortificationCooldown: 10,
@@ -329,6 +339,7 @@
       kills: 0,
       units: [],
       fortifications: [],
+      obstacles: createMapObstacles(),
       placementPreview: null,
       projectiles: [],
       particles: [],
@@ -451,9 +462,12 @@
   function clearManualSelection(silent = false) {
     const hadSelection = state.selectedUnitId !== null;
     state.selectedUnitId = null;
+    state.cockpitMode = false;
+    state.manualFire = false;
     manualKeys.clear();
     manualTapExpiry.clear();
     viewport.classList.remove("manual-active");
+    viewport.classList.remove("cockpit-active");
     updateManualStatus();
     if (hadSelection && !silent) toast("已交还自动指挥");
   }
@@ -464,20 +478,24 @@
       return;
     }
     state.selectedUnitId = unit.id;
+    state.cockpitMode = true;
+    state.manualFire = false;
     manualKeys.clear();
     manualTapExpiry.clear();
     viewport.classList.add("manual-active");
+    viewport.classList.add("cockpit-active");
     updateManualStatus();
-    toast(`已接管${TYPES[unit.type].name}：WASD 移动，武器自动攻击`, false, 2300);
+    focusUnit(unit, true);
+    toast(`进入${TYPES[unit.type].name}驾驶视角：WASD驾驶，按住左键开火`, false, 2600);
   }
 
   function updateManualStatus() {
     const unit = state ? getSelectedUnit() : null;
     el.manualStatus.classList.toggle("selected", Boolean(unit));
     if (unit) {
-      el.manualStatus.innerHTML = `<b>正在操纵：${TYPES[unit.type].name}</b><span>W / A / S / D 移动 · 自动攻击 · ESC 交还指挥</span>`;
+      el.manualStatus.innerHTML = `<b>驾驶模式：${TYPES[unit.type].name}</b><span>WASD 驾驶 · 左键开火 · ESC 退出 · F 跟随战线</span>`;
     } else {
-      el.manualStatus.innerHTML = "<b>自由操控</b><span>点击我方单位后使用 W / A / S / D 移动，武器会自动开火</span>";
+      el.manualStatus.innerHTML = "<b>自由操控</b><span>拖动或 WASD 移动地图 · 点击我方单位进入驾驶视角 · F 跟随前线</span>";
     }
   }
 
@@ -795,6 +813,7 @@
   function update(dt) {
     if (!state.running || state.paused || state.ended) return;
     state.time += dt;
+    state.manualAimPulse = Math.max(0, state.manualAimPulse - dt * 2.4);
     if (state.destroying) {
       updateHQDestruction(dt);
       return;
@@ -844,7 +863,13 @@
     updateMachineGunTowers(state.playerHQ, dt);
     updateMachineGunTowers(state.enemyHQ, dt);
     updateFortifications(dt);
-    for (const unit of state.units) updateUnit(unit, dt);
+    updateMapObstacles(dt);
+    for (const unit of state.units) {
+      updateUnit(unit, dt);
+      resolveUnitObstacleCollision(unit);
+    }
+    manualFireControl(getSelectedUnit());
+    updateCameraControl(dt);
     for (const projectile of state.projectiles) updateProjectile(projectile, dt);
     for (const particle of state.particles) updateParticle(particle, dt);
     for (const floater of state.floaters) {
@@ -1487,7 +1512,7 @@
       return { x: BRIDGES[bridge] + (column - 1) * 34, y: RIVER_BOTTOM + 92 + row * 52 };
     }
     if (state.battleOrder === "baseDefense") {
-      const baseColumns = [285, 450, 615];
+      const baseColumns = [420, 600, 780];
       return { x: baseColumns[column], y: unit.air ? PLAYER_HQ_Y - 445 + row * 45 : PLAYER_HQ_Y - 370 + row * 62 };
     }
     return null;
@@ -1532,6 +1557,107 @@
       createTrackDust(unit);
       unit.dustTimer = .08 + Math.random() * .06;
     }
+    if (state.cockpitMode) {
+      unit.turretAngle = rotateToward(unit.turretAngle, unit.heading, dt * 7);
+      unit.aaAngle = rotateToward(unit.aaAngle, unit.heading, dt * 7);
+      focusUnit(unit);
+    }
+  }
+
+  function updateMapObstacles(dt) {
+    for (const obstacle of state.obstacles) {
+      if (obstacle.dead) continue;
+      obstacle.hitFlash = Math.max(0, obstacle.hitFlash - dt * 5);
+    }
+  }
+
+  function resolveUnitObstacleCollision(unit) {
+    if (unit.dead || unit.air) return;
+    const size = TYPES[unit.type].size * .58;
+    for (const obstacle of state.obstacles) {
+      if (obstacle.dead) continue;
+      const dx = unit.x - obstacle.x;
+      const dy = unit.y - obstacle.y;
+      const distance = Math.max(.01, Math.hypot(dx, dy));
+      const minimum = size + obstacle.size * .58;
+      if (distance >= minimum) continue;
+      const push = minimum - distance;
+      unit.x += dx / distance * push;
+      unit.y += dy / distance * push;
+      unit.x = Math.max(65, Math.min(W - 65, unit.x));
+      unit.y = Math.max(100, Math.min(H - 100, unit.y));
+      unit.moving = false;
+    }
+  }
+
+  function updateCameraControl(dt) {
+    const selected = getSelectedUnit();
+    if (selected && state.cockpitMode) {
+      focusUnit(selected);
+      return;
+    }
+    if (!state.started) return;
+    const speed = 620 * dt;
+    const dx = (cameraKeys.has("KeyD") ? 1 : 0) - (cameraKeys.has("KeyA") ? 1 : 0);
+    const dy = (cameraKeys.has("KeyS") ? 1 : 0) - (cameraKeys.has("KeyW") ? 1 : 0);
+    if (!dx && !dy) return;
+    viewport.scrollLeft += dx * speed;
+    viewport.scrollTop += dy * speed;
+    el.dragHint.classList.add("hidden");
+    updateCameraBox();
+  }
+
+  function focusUnit(unit, instant = false) {
+    if (!unit) return;
+    const xRatio = unit.x / W;
+    const yRatio = unit.y / H;
+    const top = yRatio * canvas.clientHeight - viewport.clientHeight * .52;
+    const left = xRatio * canvas.clientWidth - viewport.clientWidth * .5;
+    viewport.scrollTo({ top: Math.max(0, top), left: Math.max(0, left), behavior: instant ? "auto" : "smooth" });
+    updateCameraBox();
+  }
+
+  function manualFireControl(unit) {
+    if (!state.cockpitMode || !state.manualFire || !unit || unit.dead) return;
+    const stats = TYPES[unit.type];
+    if (unit.reload > 0) return;
+    const target = findManualAimTarget(unit);
+    if (!target) {
+      state.manualAimPulse = .15;
+      unit.reload = Math.min(stats.fireRate, stats.bullet ? .12 : .28);
+      return;
+    }
+    unit.turretAngle = unit.heading;
+    fireUnitWeapon(unit, target);
+    state.manualAimPulse = .32;
+  }
+
+  function findManualAimTarget(unit) {
+    const stats = TYPES[unit.type];
+    const range = Math.max(stats.range, unit.type === "rocket" ? 430 : unit.air ? 240 : 210);
+    const candidates = [];
+    for (const enemy of state.units) if (!enemy.dead && enemy.team !== unit.team) candidates.push(enemy);
+    for (const fortification of state.fortifications) if (!fortification.dead && fortification.team !== unit.team && fortification.completed) candidates.push(fortification);
+    const enemyHQ = unit.team === "player" ? state.enemyHQ : state.playerHQ;
+    candidates.push(enemyHQ, enemyHQ.warehouse, ...enemyHQ.machineGuns.filter(tower => !tower.dead));
+    for (const obstacle of state.obstacles) if (!obstacle.dead && obstacle.destructible) candidates.push(obstacle);
+    const facing = unit.heading - Math.PI / 2;
+    let best = null;
+    let bestScore = Infinity;
+    for (const target of candidates) {
+      const tx = target.x ?? W / 2;
+      const ty = target.y;
+      const dx = tx - unit.x;
+      const dy = ty - unit.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance > range) continue;
+      const angle = Math.atan2(dy, dx);
+      const delta = Math.abs(angleDelta(facing, angle));
+      if (delta > .55) continue;
+      const score = distance + delta * 210;
+      if (score < bestScore) { best = target; bestScore = score; }
+    }
+    return best;
   }
 
   function isBridgeSurface(x, margin = 0) {
@@ -1730,6 +1856,7 @@
     if (target.kind === "tower") return Math.hypot(targetX - projectile.tx, targetY - projectile.ty) <= 29;
     if (target.kind === "warehouse") return Math.abs(targetX - projectile.tx) <= 48 && Math.abs(targetY - projectile.ty) <= 38;
     if (target.kind === "fortification") return Math.hypot(targetX - projectile.tx, targetY - projectile.ty) <= target.size * .72;
+    if (target.kind === "obstacleMap") return Math.hypot(targetX - projectile.tx, targetY - projectile.ty) <= target.size * .72;
     const size = TYPES[target.type]?.size ?? 30;
     const hitRadius = Math.max(10, size * (projectile.bullet ? .36 : .4));
     return Math.hypot(targetX - projectile.tx, targetY - projectile.ty) <= hitRadius;
@@ -1769,6 +1896,23 @@
   }
 
   function damageTarget(target, amount, attackingTeam) {
+    if (target.kind === "obstacleMap") {
+      if (!target.destructible) {
+        target.hitFlash = 1;
+        createBulletImpact(target.x, target.y, attackingTeam);
+        return;
+      }
+      target.hp = Math.max(0, target.hp - amount);
+      target.hitFlash = 1;
+      state.floaters.push({ x: target.x, y: target.y - 25, text: `-${amount}`, team: attackingTeam, life: .7, maxLife: .7 });
+      if (target.hp <= 0 && !target.dead) {
+        target.dead = true;
+        createExplosion(target.x, target.y, target.type === "ruin" ? 1.05 : .75, attackingTeam);
+        addLog(`${target.type === "sandbag" ? "沙袋掩体" : "废墟掩体"}被摧毁`, attackingTeam === "player" ? "ally" : "enemy");
+        state.shake = Math.max(state.shake, 2.5);
+      }
+      return;
+    }
     target.hp = Math.max(0, target.hp - amount);
     target.hitFlash = 1;
     state.floaters.push({ x: target.x ?? W / 2, y: target.y - 25, text: `-${amount}`, team: attackingTeam, life: .7, maxLife: .7 });
@@ -1984,6 +2128,41 @@
   function seededRandom(seed) {
     let value = seed % 2147483647;
     return () => ((value = value * 16807 % 2147483647) - 1) / 2147483646;
+  }
+
+  function createMapObstacles() {
+    const random = seededRandom(31247 + H + (HAS_RIVER ? 17 : 3) + BRIDGES.length * 31);
+    const obstacles = [];
+    const safeFromBase = y => y > 370 && y < H - 370;
+    for (let i = 0; i < 34; i++) {
+      const lane = LANES[Math.floor(random() * LANES.length)];
+      const side = random() < .5 ? -1 : 1;
+      let x = lane + side * (84 + random() * 150) + (random() - .5) * 44;
+      let y = 390 + random() * (H - 780);
+      if (HAS_RIVER && y > RIVER_TOP - 110 && y < RIVER_BOTTOM + 110) {
+        y += y < (RIVER_TOP + RIVER_BOTTOM) / 2 ? -150 : 150;
+      }
+      x = Math.max(90, Math.min(W - 90, x));
+      y = Math.max(220, Math.min(H - 220, y));
+      if (!safeFromBase(y)) continue;
+      const destructible = random() < .56;
+      const hp = destructible ? 150 + Math.round(random() * 170) : Infinity;
+      obstacles.push({
+        id: `obs-${i}`,
+        kind: "obstacleMap",
+        type: destructible ? (random() < .5 ? "sandbag" : "ruin") : (random() < .5 ? "rock" : "concrete"),
+        x,
+        y,
+        size: 34 + random() * 32,
+        hp,
+        maxHp: hp,
+        destructible,
+        rotation: random() * Math.PI,
+        hitFlash: 0,
+        dead: false
+      });
+    }
+    return obstacles;
   }
 
   function drawSoftShadow(g, x, y, rx, ry, alpha = .38) {
@@ -2251,6 +2430,7 @@
     ctx.drawImage(background, 0, 0);
     drawTerritoryLine();
     for (const wreck of state.wrecks) drawWreck(wreck);
+    for (const obstacle of state.obstacles) drawMapObstacle(obstacle);
     drawWarehouse(state.enemyHQ.warehouse);
     drawWarehouse(state.playerHQ.warehouse);
     drawHQ(state.enemyHQ);
@@ -2451,6 +2631,55 @@
     ctx.fillStyle = "rgba(238,245,233,.25)";
     ctx.font = "700 10px Rajdhani";
     ctx.fillText("CONTACT LINE", 38, front - 8);
+    ctx.restore();
+  }
+
+  function drawMapObstacle(obstacle) {
+    if (obstacle.dead) return;
+    ctx.save();
+    ctx.translate(obstacle.x, obstacle.y);
+    ctx.rotate(obstacle.rotation);
+    const size = obstacle.size;
+    drawSoftShadow(ctx, 7, size * .32, size * .9, size * .34, .36);
+    if (obstacle.hitFlash > 0) {
+      ctx.shadowColor = "#fff3c0";
+      ctx.shadowBlur = 14 * obstacle.hitFlash;
+    }
+    if (obstacle.type === "rock") {
+      const rock = ctx.createLinearGradient(-size, -size, size, size);
+      rock.addColorStop(0, "#8b8972");
+      rock.addColorStop(.45, "#555849");
+      rock.addColorStop(1, "#222820");
+      ctx.fillStyle = rock;
+      ctx.beginPath();
+      ctx.moveTo(-size * .9, size * .1); ctx.lineTo(-size * .62, -size * .55); ctx.lineTo(-size * .08, -size * .82);
+      ctx.lineTo(size * .68, -size * .48); ctx.lineTo(size * .9, size * .1); ctx.lineTo(size * .46, size * .55); ctx.lineTo(-size * .55, size * .48);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "rgba(13,16,12,.7)"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,220,.13)";
+      ctx.beginPath(); ctx.moveTo(-size * .52, -size * .42); ctx.lineTo(-size * .06, -size * .66); ctx.lineTo(size * .38, -size * .38); ctx.lineTo(-size * .16, -size * .2); ctx.closePath(); ctx.fill();
+    } else if (obstacle.type === "concrete") {
+      drawIsoBlock(ctx, 0, 0, size * 1.6, size * .72, size * .34, "#777b6c", "#3b4038", "#52594d", "rgba(20,24,20,.8)");
+      ctx.strokeStyle = "rgba(28,31,27,.55)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-size * .45, -size * .16); ctx.lineTo(-size * .12, size * .24); ctx.lineTo(size * .25, -size * .05); ctx.stroke();
+    } else if (obstacle.type === "sandbag") {
+      for (let row = 0; row < 3; row++) {
+        for (let col = -2; col <= 2; col++) {
+          ctx.fillStyle = row % 2 ? "#8b7650" : "#a18b61";
+          ctx.beginPath(); ctx.ellipse(col * size * .28 + (row % 2) * size * .14, row * size * .18 - size * .22, size * .18, size * .11, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = "rgba(34,26,18,.45)"; ctx.lineWidth = 1; ctx.stroke();
+        }
+      }
+    } else {
+      drawIsoBlock(ctx, 0, 0, size * 1.35, size * .82, size * .32, "#666052", "#2e302b", "#46463c", "rgba(15,18,14,.75)");
+      ctx.strokeStyle = "#171b16"; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(-size * .65, -size * .34); ctx.lineTo(size * .55, size * .32); ctx.stroke();
+      ctx.strokeStyle = "#6d5540"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(size * .38, -size * .38); ctx.lineTo(-size * .28, size * .34); ctx.stroke();
+    }
+    if (obstacle.destructible && obstacle.hp < obstacle.maxHp) {
+      ctx.rotate(-obstacle.rotation);
+      ctx.fillStyle = "rgba(0,0,0,.72)"; ctx.fillRect(-30, size * .72, 60, 5);
+      ctx.fillStyle = "#d6b36d"; ctx.fillRect(-30, size * .72, 60 * obstacle.hp / obstacle.maxHp, 5);
+    }
     ctx.restore();
   }
 
@@ -3514,6 +3743,25 @@
       targetX: Math.round(projectile.tx),
       targetY: Math.round(projectile.ty)
     }))); 
+    const cockpitActive = Boolean(state.cockpitMode && manualUnit && !manualUnit.dead);
+    el.cockpitOverlay?.classList.toggle("active", cockpitActive);
+    viewport.classList.toggle("cockpit-active", cockpitActive);
+    if (cockpitActive) {
+      const stats = TYPES[manualUnit.type];
+      const weaponName = manualUnit.type === "helicopter" ? "航空机枪 · 可越河突击" :
+        manualUnit.type === "rocket" ? "火箭齐射 · 慢装填" :
+        manualUnit.type === "artillery" ? "野战炮 · 远距支援" :
+        stats.bullet ? "机枪连射" :
+        manualUnit.type === "heavy" ? "重坦主炮 + 双联防空" : "坦克主炮";
+      const reloadRatio = clamp(1 - (manualUnit.reload ?? 0) / Math.max(.1, stats.fireRate), 0, 1);
+      el.cockpitUnit.textContent = `${stats.name} #${manualUnit.id}`;
+      el.cockpitWeapon.textContent = `${weaponName} · 左键按住开火`;
+      el.cockpitReload.style.width = `${reloadRatio * 100}%`;
+      el.cockpitReload.style.background = reloadRatio >= .96 ? "linear-gradient(90deg,#9fffc3,#f3d36c)" : "linear-gradient(90deg,#f0634e,#f0a750)";
+      el.cockpitOverlay.style.setProperty("--aim-pulse", state.manualAimPulse.toFixed(2));
+    } else if (el.cockpitReload) {
+      el.cockpitReload.style.width = "0%";
+    }
     el.unitCards.forEach(card => card.classList.toggle("unaffordable", cp < TYPES[card.dataset.unit].cost));
     el.fortificationCards.forEach(card => card.classList.toggle("unaffordable", cp < FORTIFICATION_TYPES[card.dataset.fortification].cost));
   }
@@ -3559,14 +3807,22 @@
   function focusFront() {
     const all = state.units;
     let y = H / 2;
+    let x = W / 2;
     if (all.length) {
       const allyFront = state.units.filter(u => u.team === "player").sort((a, b) => a.y - b.y)[0];
       const enemyFront = state.units.filter(u => u.team === "enemy").sort((a, b) => b.y - a.y)[0];
-      if (allyFront && enemyFront) y = (allyFront.y + enemyFront.y) / 2;
-      else y = (allyFront || enemyFront).y;
+      if (allyFront && enemyFront) {
+        y = (allyFront.y + enemyFront.y) / 2;
+        x = (allyFront.x + enemyFront.x) / 2;
+      } else {
+        const front = allyFront || enemyFront;
+        y = front.y;
+        x = front.x;
+      }
     }
     const scale = viewport.scrollHeight / H;
-    viewport.scrollTo({ top: y * scale - viewport.clientHeight / 2, behavior: "smooth" });
+    const xScale = canvas.clientWidth / W;
+    viewport.scrollTo({ top: y * scale - viewport.clientHeight / 2, left: x * xScale - viewport.clientWidth / 2, behavior: "smooth" });
   }
 
   function selectManualUnitAt(clientX, clientY) {
@@ -3704,16 +3960,29 @@
   }, { passive: true });
   viewport.addEventListener("pointerdown", event => {
     if (event.pointerType === "touch") return;
-    dragging = true; dragStartY = event.clientY; dragStartScroll = viewport.scrollTop;
+    if (state.cockpitMode && event.target === canvas && event.button === 0) {
+      initAudio();
+      state.manualFire = true;
+      state.manualAimPulse = .35;
+      event.preventDefault();
+      return;
+    }
+    dragging = true;
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+    dragStartScrollLeft = viewport.scrollLeft;
+    dragStartScroll = viewport.scrollTop;
     pointerStartX = event.clientX; pointerStartY = event.clientY; pointerMoved = false; pointerStartedOnCanvas = event.target === canvas;
     viewport.classList.add("dragging"); viewport.setPointerCapture(event.pointerId);
   });
   viewport.addEventListener("pointermove", event => {
     if (!dragging) return;
     if (Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) > 6) pointerMoved = true;
+    viewport.scrollLeft = dragStartScrollLeft - (event.clientX - dragStartX) * 1.25;
     viewport.scrollTop = dragStartScroll - (event.clientY - dragStartY) * 1.25;
   });
   viewport.addEventListener("pointerup", event => {
+    state.manualFire = false;
     if (state.destructionReady) {
       dragging = false;
       viewport.classList.remove("dragging");
@@ -3727,6 +3996,7 @@
     if (shouldSelect) selectManualUnitAt(event.clientX, event.clientY);
   });
   viewport.addEventListener("pointercancel", () => { dragging = false; pointerMoved = false; viewport.classList.remove("dragging"); });
+  window.addEventListener("pointerup", () => { state.manualFire = false; });
 
   minimap.addEventListener("click", event => {
     const rect = minimap.getBoundingClientRect();
@@ -3748,10 +4018,19 @@
       clearManualSelection();
       return;
     }
-    if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code) && getSelectedUnit() && state.started && !state.paused && !state.ended) {
+    if (event.code === "KeyF" && state.started && !state.paused && !state.ended) {
       event.preventDefault();
-      manualKeys.add(event.code);
-      manualTapExpiry.set(event.code, state.time + .11);
+      focusFront();
+      return;
+    }
+    if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code) && state.started && !state.paused && !state.ended) {
+      event.preventDefault();
+      if (getSelectedUnit()) {
+        manualKeys.add(event.code);
+        manualTapExpiry.set(event.code, state.time + .11);
+      } else {
+        cameraKeys.add(event.code);
+      }
       return;
     }
     if (new URLSearchParams(location.search).has("debug") && event.code === "KeyG" && state.started) {
@@ -4013,16 +4292,23 @@
     else if (event.code === "Digit5") selectUnit("rocket");
     else if (event.code === "Digit6") selectUnit("helicopter");
     else if (event.code === "Digit7") selectUnit("apc");
-    else if (["KeyA", "KeyS", "KeyD"].includes(event.code) && state.started && !state.paused && !state.ended) {
+    else if (event.altKey && ["KeyA", "KeyS", "KeyD"].includes(event.code) && state.started && !state.paused && !state.ended) {
       deploy("player", state.selected, { KeyA: 0, KeyS: 1, KeyD: 2 }[event.code]);
     } else if (event.code === "Space") {
       event.preventDefault(); togglePause();
     }
   });
   window.addEventListener("keyup", event => {
-    if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) manualKeys.delete(event.code);
+    if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) {
+      manualKeys.delete(event.code);
+      cameraKeys.delete(event.code);
+    }
   });
-  window.addEventListener("blur", () => manualKeys.clear());
+  window.addEventListener("blur", () => {
+    manualKeys.clear();
+    cameraKeys.clear();
+    state.manualFire = false;
+  });
   window.addEventListener("resize", updateCameraBox);
 
   updateCareerBoard();
