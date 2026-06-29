@@ -76,26 +76,35 @@
           <div id="manual-status" class="manual-status"><b>自由操控</b><span>点击我方单位后使用 W / A / S / D 移动，武器会自动开火</span></div>
           <div id="battle-intro" class="battle-intro" aria-live="assertive">
             <div class="soldier-figure" aria-hidden="true">
-              <svg viewBox="0 0 220 360">
+              <svg viewBox="0 0 260 380">
                 <defs>
-                  <linearGradient id="uniform" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#718064"/><stop offset=".55" stop-color="#38463b"/><stop offset="1" stop-color="#202a24"/></linearGradient>
-                  <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d4a77c"/><stop offset="1" stop-color="#805b43"/></linearGradient>
-                  <filter id="soldierShadow"><feDropShadow dx="8" dy="12" stdDeviation="7" flood-opacity=".6"/></filter>
+                  <linearGradient id="uniform" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8a946b"/><stop offset=".48" stop-color="#4c5d48"/><stop offset="1" stop-color="#1c271f"/></linearGradient>
+                  <linearGradient id="uniformDark" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#3b493b"/><stop offset="1" stop-color="#111812"/></linearGradient>
+                  <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e3b58a"/><stop offset=".55" stop-color="#b77b55"/><stop offset="1" stop-color="#6f4835"/></linearGradient>
+                  <linearGradient id="visor" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#60746e"/><stop offset="1" stop-color="#16201d"/></linearGradient>
+                  <filter id="soldierShadow"><feDropShadow dx="10" dy="16" stdDeviation="8" flood-opacity=".65"/></filter>
                 </defs>
                 <g filter="url(#soldierShadow)">
-                  <path fill="#171d19" d="M64 340 79 211h28l-2 129H84l-5-85-1 85H64Zm63 0-12-129h28l9 129h-21l-9-84 20 84h-15Z"/>
-                  <path fill="url(#uniform)" stroke="#19211c" stroke-width="4" d="M53 224c5-59 19-91 47-101l34 2c25 13 36 45 42 99l-31 13-11-61-1 88H76l-1-88-7 59-33-9 18-2Z"/>
-                  <path fill="#262f28" d="M76 153h60v35H76z"/><path fill="#9b885b" d="M70 184h72v12H70z"/>
-                  <path fill="#1b241e" d="M82 128 93 99h30l18 29-29 16-30-16Z"/>
-                  <path fill="url(#skin)" stroke="#493426" stroke-width="3" d="M89 78c2-25 39-28 49-7l-6 41-18 16-22-15-3-35Z"/>
-                  <path fill="#303a31" stroke="#131915" stroke-width="4" d="M79 77c5-33 55-43 70-7l-5 16-64 2-1-11Z"/>
-                  <path fill="#515e4f" d="M86 67c11-18 43-19 55 2-18-5-36-4-55-2Z"/>
-                  <path fill="#2b211b" d="M99 94h8v4h-8zm25 0h8v4h-8z"/><path stroke="#3b291f" stroke-width="3" d="m108 111 9 3 10-4" fill="none"/>
-                  <path fill="#29332b" stroke="#151b17" stroke-width="4" d="m139 151 18-5 42 139-16 6-44-140Z"/>
-                  <path fill="#111713" d="m166 223 29-9 5 12-30 10z"/>
-                  <path fill="url(#skin)" d="m45 218 28 5-7 28-31-10 10-23Zm104 2 28-8 8 26-31 11-5-29Z"/>
-                  <path fill="#313c33" d="M88 146h18v48H88zm32 0h18v48h-18z"/><path fill="#a79a6b" d="M92 151h10v35H92zm32 0h10v35h-10z"/>
-                  <circle cx="113" cy="170" r="5" fill="#c9d6bd"/>
+                  <ellipse cx="121" cy="360" rx="68" ry="14" fill="rgba(0,0,0,.38)"/>
+                  <path fill="#111711" d="M77 356c7-48 13-96 19-145h36c-2 45-5 95-8 145h-29l-4-88-8 88H77Zm76 0c-7-51-13-99-17-145h36c7 46 15 95 23 145h-29l-17-88 5 88h-1Z"/>
+                  <path fill="#252f27" d="M86 340h42l-3 17H74c0-8 4-14 12-17Zm76 0h42c9 4 14 10 16 17h-54l-4-17Z"/>
+                  <path fill="url(#uniform)" stroke="#131a14" stroke-width="4" d="M54 229c8-62 25-94 59-107l38 1c31 13 48 46 56 105l-35 17-15-65-3 90H91l-4-90-13 65-35-15 15-1Z"/>
+                  <path fill="#202820" d="M88 147h68v45H88z"/>
+                  <path fill="#b3a06c" d="M78 191h88v13H78z"/>
+                  <path fill="#1e271f" d="M94 123 105 94h37l22 31-35 19-35-21Z"/>
+                  <path fill="url(#skin)" stroke="#473020" stroke-width="3" d="M101 78c0-29 47-34 59-9l-5 47-22 18-25-16-7-40Z"/>
+                  <path fill="#2b372c" stroke="#111812" stroke-width="4" d="M88 78c4-37 64-49 83-9l-6 18-77 5v-14Z"/>
+                  <path fill="#596852" d="M98 66c14-20 49-21 63 1-20-5-41-5-63-1Z"/>
+                  <path fill="url(#visor)" d="M100 85c18 7 45 6 65-2l-2 13c-20 7-42 7-61 1l-2-12Z"/>
+                  <path fill="#231b16" d="M112 99h8v4h-8zm28-1h8v4h-8z"/><path stroke="#3f2b20" stroke-width="3" d="m123 116 10 4 11-5" fill="none"/>
+                  <path fill="url(#uniformDark)" d="M72 156c-16 16-27 40-34 74l35 15 16-74-17-15Zm97-1 18 16 21 76 34-17c-8-38-21-62-39-77l-34 2Z"/>
+                  <path fill="url(#skin)" d="m35 230 31 8-8 31-34-12 11-27Zm175 0 31-9 10 30-35 14-6-35Z"/>
+                  <path fill="#101510" d="m177 141 18-5 43 151-18 7-43-153Z"/>
+                  <path fill="#252b25" d="m205 221 32-10 6 13-33 12z"/>
+                  <path fill="#39443a" d="M99 148h21v49H99zm37 0h21v49h-21z"/><path fill="#b8aa72" d="M104 154h11v36h-11zm38 0h11v36h-11z"/>
+                  <path fill="#191f19" d="M97 211h57l-5 21H103l-6-21Z"/>
+                  <circle cx="129" cy="174" r="5" fill="#d7e3cc"/>
+                  <path fill="none" stroke="#c4d296" stroke-width="2" opacity=".45" d="M108 134c14 14 31 14 46 0"/>
                 </g>
               </svg>
             </div>
@@ -223,6 +232,7 @@
         <section class="career-board home-career" aria-label="长期战绩">
           <div class="career-title"><span>PERMANENT RECORD</span><b>指挥官战绩</b></div>
           <div><small>胜利</small><strong id="home-career-wins">0</strong></div>
+          <div><small>积分</small><strong id="home-career-score">0</strong></div>
           <div><small>战败</small><strong id="home-career-losses">0</strong></div>
           <div><small>总战局</small><strong id="home-career-total">0</strong></div>
           <div><small>胜率</small><strong id="home-career-rate">--</strong></div>
@@ -241,6 +251,7 @@
         <section class="career-board" aria-label="战绩榜">
           <div class="career-title"><span>COMMANDER RECORD</span><b>战绩榜</b></div>
           <div><small>胜利</small><strong id="career-wins">0</strong></div>
+          <div><small>积分</small><strong id="career-score">0</strong></div>
           <div><small>战败</small><strong id="career-losses">0</strong></div>
           <div><small>总战局</small><strong id="career-total">0</strong></div>
           <div><small>胜率</small><strong id="career-rate">0%</strong></div>
